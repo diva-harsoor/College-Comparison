@@ -1,0 +1,208 @@
+
+<!DOCTYPE html>
+<!-- 
+Diva Harsoor
+Dr. Z CSC 630 Per 3
+D3 Lab: Graphing data about college
+With help from: everyone in the whole wide world. Special thanks to Kunal Vaishnavi, Connor Devlin, and Darcy Meyer.
+-->
+<html>
+<head>
+    <meta charset='utf-8'>
+    <title> College Data Comparison </title>
+    <script src='https://d3js.org/d3.v4.min.js'></script>
+    <link type="text/css" href="stylesheet.css" rel="stylesheet"/>
+</head>
+<body>
+
+<h1> College Data Comparison </h1>
+
+<p> Choose your variables for X and Y with the dropdown menu. To toggle between the Top 200 Schools by their world ranking and a random slice of 200 schools, simply press the text beside <b>Using: </b>. When you have selected your data, hit <b>Plot It!</b> and it will appear in the box below. Mouse over a data point to see the school its corresponding school and that school's world ranking. </p>
+
+<div id="button-container">
+  <div class="button select"> X: <select id='xval' onchange='updateX()'></select> </div>
+  <div class="button select"> Y: <select id='yval' onchange='updateY()'></select> </div>
+  <div class="button" id="slice_button"> Using: <span id = "slicing"> Top 200 Schools </span> </div>
+  <div class="button" id="plot_button"> Plot It! </div>
+</div>
+
+<div id="container"></div>
+
+<script>
+
+const width = 1000,
+      height = 600,
+      margin = {
+          top: 10,
+          bottom: 100,
+          left: 100,
+          right: 10,
+      };
+
+var cur_x = "world_rank";
+function updateX() {
+  cur_x = document.getElementById('xval').value;
+}
+
+var cur_y = "world_rank";
+function updateY() {
+  cur_y = document.getElementById('yval').value;
+}
+
+d3.csv("http://localhost:8000/cwurData.csv", function(error, data) {
+
+    data.splice(0, 200); 
+    data.splice(1000); 
+
+    var dataslice = data.slice(0, 200);
+    var randomized = false;
+
+    function sliceData() {
+      if (randomized) {
+        var split_on = Math.floor((Math.random() * 799) + 1);
+        dataslice = data.slice(split_on, split_on + 200);
+        document.getElementById("slicing").innerHTML="Top 200 Schools";
+      }
+      else {
+        dataslice = data.slice(0, 200);
+        document.getElementById("slicing").innerHTML="Random 200 Schools";
+      }
+      randomized = !randomized;
+    }
+
+    slice_button = document.getElementById("slice_button");
+    slice_button.addEventListener("click", sliceData);
+
+
+    cols = ["world_rank", "national_rank", "quality_of_education", "alumni_employment", "quality_of_faculty", "publications", "influence", "citations", "patents", "score"]
+    col_names = ["World Rank", "National Rank", "Quality of Education", "Alumni Employment", "Quality of Faculty", "Publications", "Influence", "Citations", "Patents", "Score"]
+
+    function appendOptions(select) {
+      for (i = 0; i < cols.length; i++) {
+        var option = document.createElement("option");
+        option.value = cols[i];
+        option.text = col_names[i];
+        select.appendChild(option);
+      }
+    }
+
+    appendOptions(document.getElementById("xval"));
+    appendOptions(document.getElementById("yval"));
+
+    data.forEach(function(d) {
+      for (i = 0; i < cols.length; i++) {
+        d[cols[i]] = +d[cols[i]];
+      }
+    });
+
+    var ranges = [];
+    for(i = 0; i < cols.length; i++) {
+      ranges.push(d3.extent(dataslice, function(d) {
+        return d[cols[i]]}
+        )
+      )
+    }
+
+    var scales = {}
+    for(i = 0; i < cols.length; i++) {
+      scales[cols[i]] = {
+        x: d3.scaleLinear()
+          .domain(ranges[i])
+          .range([margin.left, width - margin.right]),
+        y: d3.scaleLinear()
+          .domain(ranges[i])
+          .range([height - margin.bottom, margin.top]),
+        name: col_names[i]
+      };
+    }
+
+    plot_button = document.getElementById("plot_button");
+    plot_button.addEventListener("click", plot);
+
+    var svg;
+    var instantiated = false;
+    function plot() {
+      if(instantiated) {
+        svg.selectAll("g")
+          .remove();
+
+        svg.selectAll("circle")
+          .data(dataslice, function(d) {return d.institution})
+          .transition()
+          .duration(1000)
+          .attr("cx", function(d) {return scales[cur_x].x(d[cur_x]);})
+          .attr("cy", function(d) {
+            return scales[cur_y].y(d[cur_y]);})
+          .attr("r", 5)
+
+        svg.selectAll("text")
+          .remove();
+      } else {
+        svg = d3.select("#container")
+          .append("svg")
+          .attr("width", width)
+          .attr("height", height)
+          .style("background-color", "#AEC9DC")
+          .style("display", "block")
+          .style("margin","0 auto");
+
+        svg.selectAll("circle")
+          .data(dataslice, function(d) {return d.institution})
+          .enter()
+          .append("circle")
+          .attr("cx", function(d) {return scales[cur_x].x(d[cur_x]);})
+          .attr("cy", function(d) {
+            return scales[cur_y].y(d[cur_y]);})
+          .attr("r", 5)
+          .attr("fill", "#5489ad")
+          .on("mouseover", function(d) {
+            var point = d3.select(this);
+            svg.append("text")
+              .attr("x", parseFloat(point.attr("cx")) + 10)
+              .attr("y", parseFloat(point.attr("cy")) + 10)
+              .attr("id", "hover-text")
+              .text(d.institution + ": #" + d.world_rank)
+              .style("font-weight", "normal")
+              .style("font-size", "11px")
+              // .attr("fill", "#fff")
+            point
+              .transition()
+              .attr("r", 7)
+          })
+          .on("mouseout", function(d) {
+            d3.selectAll("#hover-text")
+              .remove()
+            d3.select(this)
+              .transition()
+              .attr("r", 5);
+          })
+
+        instantiated = true;
+      }
+
+      svg.append("g")
+          .attr("transform",`translate(${0}, ${height - margin.bottom})`)
+          .call(d3.axisBottom(scales[cur_x].x).ticks(10));
+
+      svg.append("text")
+          .attr("transform",`translate(${width / 2}, ${height - (margin.bottom / 2)})`)
+          .text(scales[cur_x].name)
+          .style("fill", "#10315F")
+          .style("font-size", "14px");
+
+      svg.append("g")
+          .attr("transform", `translate(${margin.left}, ${0})`)
+          .call(d3.axisLeft(scales[cur_y].y).ticks(10));
+
+      svg.append("text")
+          .attr("transform",`translate(${margin.left / 2}, ${height / 2}) rotate(-90) `)
+          .text(scales[cur_y].name)
+          .style("fill", "#10315F")
+          .style("font-size", "14px");
+    }
+})
+
+</script>
+
+</body>
+</html>
